@@ -1,0 +1,4 @@
+.env
+check.py
+ollama_timer.py
+__pycache__/

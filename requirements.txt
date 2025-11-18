@@ -1,0 +1,9 @@
+crewai
+crewai[google-genai]
+load_dotenv
+crewai_tools
+python-dotenv
+pymongo
+fastapi
+openai
+uvicorn
