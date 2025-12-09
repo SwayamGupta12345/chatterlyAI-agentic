@@ -11,9 +11,20 @@ from fastapi import status
 
 # Load environment variables
 load_dotenv()
-api_key = os.getenv("GEMINI_API_KEY")
 
-if not api_key:
+
+api_keys = [
+    os.getenv("GEMINI_API_KEY"),
+    os.getenv("GEMINI_API_KEY_1"),
+    os.getenv("GEMINI_API_KEY_2"),
+    # os.getenv("GEMINI_API_KEY_3"),
+    # os.getenv("GEMINI_API_KEY_4"),
+    # os.getenv("GEMINI_API_KEY_5"),
+]
+
+# api_key = os.getenv("GEMINI_API_KEY")
+
+if not api_keys or all(key is None for key in api_keys):
     raise ValueError("Error: GEMINI_API_KEY is missing from the .env file.")
 
 # Initialize FastAPI app
@@ -28,7 +39,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 # Initialize LLM with Gemini
-llm = LLM(model="gemini/gemini-2.5-flash", api_key=api_key, verbose=True)
+# Use the first non-None key
+first_key = next((k for k in api_keys if k), None)
+if not first_key:
+    raise ValueError("No valid GEMINI_API_KEY found in .env")
+
+llm = LLM(model="gemini/gemini-2.5-flash", api_key=first_key, verbose=True)
 # Define AI Agents with improved backstories
 
 
@@ -183,7 +199,6 @@ custom_responses = {
 }
 
 
-
 # Function to check for custom responses
 
 
@@ -249,22 +264,61 @@ async def chat(request: ChatRequest):
             description = f"Respond to this student query: {request.message}"
             expected_output = "A helpful and versatile response."
 
-        # Create a task for the agent
-        current_task = Task(description=description, agent=agent,
-                            expected_output=expected_output)
-        crew = Crew(agents=[agent], tasks=[current_task])
+    last_error = None
 
+    # # Create a task for the agent
+    # current_task = Task(description=description, agent=agent,
+    #                     expected_output=expected_output)
+    # crew = Crew(agents=[agent], tasks=[current_task])
+
+    # try:
+    #     response = await asyncio.create_task(crew.kickoff_async())
+    #     bot_response = response.raw
+    #     return {"response": bot_response}
+    # except asyncio.TimeoutError:
+    #     raise HTTPException(
+    #         status_code=504,
+    #         detail="LLM request timed out. Please try again."
+    #     )
+    # except Exception as e:
+    #     raise HTTPException(status_code=500, detail=str(e))
+    # Try each API key until success
+    for key in api_keys:
+        if not key:
+            continue
         try:
-            response = await asyncio.create_task(crew.kickoff_async())
-            bot_response = response.raw
+            if agent:
+                agent.llm.api_key = key  # swap key
+                current_task = Task(description=description, agent=agent,
+                                    expected_output=expected_output)
+                crew = Crew(agents=[agent], tasks=[current_task])
+                response = await asyncio.create_task(crew.kickoff_async())
+                bot_response = response.raw
+            else:
+                # custom response scenario
+                bot_response = expected_output
+
             return {"response": bot_response}
+
         except asyncio.TimeoutError:
-            raise HTTPException(
+            last_error = HTTPException(
                 status_code=504,
-                detail="LLM request timed out. Please try again."
+                detail=f"LLM request timed out with key {key}. Trying next key..."
             )
+            continue
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            msg = str(e).lower()
+            if "quota" in msg or "resource_exhausted" in msg or "429" in msg:
+                last_error = e
+                continue  # try next key
+            else:
+                raise HTTPException(status_code=500, detail=str(e))
+
+    # If all keys fail
+    raise HTTPException(
+        status_code=503,
+        detail=f"All API keys failed or quota exceeded. Last error: {last_error}"
+    )
 
 # Run the FastAPI server
 if __name__ == "__main__":
