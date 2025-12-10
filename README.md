@@ -31,8 +31,8 @@ It acts as the **brains** behind ChatterlyAI — modular, extendable, and produc
 ## 📦 Quickstart
 
 ```bash
-git clone https://github.com/SwayamGupta12345/chatterlyAI-agentic
-cd chatterlyAI-agentic
+git clone https://github.com/SwayamGupta12345/ChatterlyAI-Agentic
+cd ChatterlyAI-Agentic
 pip install -r requirements.txt
 ```
 
